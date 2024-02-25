@@ -1,26 +1,33 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 
-	"github.com/michelpessoa/desafioRateLimiter/configs"
-	"github.com/michelpessoa/desafioRateLimiter/internal/rate"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
-	configs, err := configs.LoadConfig(".")
+	rateLimiterMiddleware, err := NewRateLimiter()
+
 	if err != nil {
 		panic(err)
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "Hello, World!")
+	// WEBSERVER
+	router := chi.NewRouter()
+	router.Use(middleware.Logger)
+	router.Use(rateLimiterMiddleware.Limit)
+	router.Use(middleware.Recoverer)
+
+	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
 	})
 
-	// Use o rate limiter como middlewares
-	limitedMux := rate.RateLimit(mux, configs.IpMaxRequest, configs.TokenMaxRequest, configs.ApiKey, configs.RedisHost, configs.RedisPort, configs.RedisPassword, configs.RedisDb, configs.WebServerPort)
+	log.Println("Iniciando o servidor web...")
+	http.ListenAndServe(GetWebServerPort(), router)
+	// END WEBSERVER
 
-	http.ListenAndServe(":8080", limitedMux)
 }
